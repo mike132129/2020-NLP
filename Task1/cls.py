@@ -194,7 +194,7 @@ def main():
 
         trainset = ques_ans_dataset(mode=args.mode)
 
-        train(trainset, BATCH_SIZE=4)
+        train(trainset, BATCH_SIZE=2)
 
     else:
 
