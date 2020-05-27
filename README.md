@@ -4,6 +4,7 @@ Natural Language Processing (2020 spring) @ NTU
 
 # Task1
 Binary classification task: to determine whether a sentence has causality
+
 [Kaggle link](https://www.kaggle.com/c/nlp-class-2020-fincausal-task1/overview)
 
 # Task2
