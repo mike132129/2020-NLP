@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from transformers import BertTokenizer, BertModel, AdamW, get_linear_schedule_with_warmup, XLNetModel
+from transformers import BertTokenizer, BertModel, AdamW, get_linear_schedule_with_warmup, XLNetModel, XLNetTokenizer
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
@@ -26,36 +26,39 @@ def argparser():
     parser.add_argument('--load_model')
     parser.add_argument('--output_path')
     parser.add_argument('--mode')
-    parser.add_argument('--xlnet', action='store_true')
+    parser.add_argument('--xlnet', action='store_true', default=False)
 
     args = parser.parse_args()
 
     return args
 
-def train(trainset, BATCH_SIZE=2):
-
-    model_version = 'xlnet-base-cased' # or bert-base-uncased
-    model = XLNetModel.from_pretrained(model_version) # or BertModel
+def train(trainset, args, BATCH_SIZE=2):
 
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    # device = torch.device('cpu') use cpu only
     print("device:", device)
 
-    model.to(device)
+    if args.xlnet:
+        model_version = 'xlnet-base-cased'
+        model = XLNetModel.from_pretrained(model_version)
+        cus_model = modified_XLNet(model, device)
 
-    cus_model = modified_XLNet(model, device) # or modified_bert
+    else:
+        model_version = 'bert-base-uncased'
+        model = BertModel.from_pretrained(model_version)
+        cus_model = modified_bert(model, device)
+
+    model.to(device)
     cus_model.to(device)
 
     train_set, valid_set = torch.utils.data.random_split(trainset, [10000, 837])
 
-
     dataloader = DataLoader(train_set, batch_size=BATCH_SIZE, collate_fn=create_mini_batch)
     validloader = DataLoader(valid_set, batch_size=30, collate_fn=create_mini_batch)
-    epochs = 30
+    epochs = 40
 
     total_steps = len(dataloader) * epochs
 
-    optimizer = AdamW(cus_model.parameters(), lr=4e-6, eps=1e-8)
+    optimizer = AdamW(cus_model.parameters(), lr=5e-6, eps=1e-8)
     scheduler = get_linear_schedule_with_warmup(optimizer, 
                                             num_warmup_steps = 0, # Default value in run_glue.py
                                             num_training_steps = total_steps)
@@ -67,7 +70,7 @@ def train(trainset, BATCH_SIZE=2):
         total_loss = 0
 
         ####### FREEZE LAYER
-        # print('FREEZEEEEEEE')
+        print('FREEZEEEEEEE')
         for i, [j, k] in enumerate(cus_model.named_parameters()):
             if i < 21:
                 k.requires_grad = False
@@ -138,25 +141,33 @@ def train(trainset, BATCH_SIZE=2):
         torch.save(cus_model.state_dict(), './model/xlnet-freeze-epoch-%s.pth' % epoch)
 
 
-def predict(test_data_path, model_path, BATCH_SIZE):
+def predict(args, BATCH_SIZE):
 
     print('======================predict=======================')
-    model_version = 'xlnet-base-cased'
-    tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
-
-    index, text, _ = load_data(test_data_path)
-    context, attention_mask = tokenization(text, tokenizer)
-    np.save('./data/test.npy', context)
-    np.save('./data/test_mask.npy', attention_mask)
 
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     print("device:", device)
 
-    model = BertModel.from_pretrained(model_version)
-    model.to(device)
+    if args.xlnet:
+        model_version = 'xlnet-base-cased'
+        tokenizer = XLNetTokenizer.from_pretrained(model_version, do_lower_case=True)
+        model = XLNetModel.from_pretrained(model_version)
+        cus_model = modified_XLNet(model, device)
 
-    cus_model = modified_bert(model, device)
-    cus_model.load_state_dict(torch.load(model_path))
+    else:
+        model_version = 'bert-base-uncased'
+        tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
+        model = BertModel.from_pretrained(model_version)
+        cus_model = modified_XLNet(model, device)
+
+    # Test data preprocess
+    index, text, _ = load_data(args.test_data_path)
+    context, attention_mask = tokenization(text, tokenizer)
+    np.save('./data/test.npy', context)
+    np.save('./data/test_mask.npy', attention_mask)
+
+    model.to(device)
+    cus_model.load_state_dict(torch.load(args.load_model))
     cus_model.to(device)
 
     data_set = ques_ans_dataset(mode='test')
@@ -177,7 +188,7 @@ def predict(test_data_path, model_path, BATCH_SIZE):
 
             sigmoid = nn.Sigmoid()
             prediction = sigmoid(logits).round()
-            predict += [int(prediction.cpu())]
+            predict += [int(i) for i in prediction.cpu().tolist()]
 
     submission = pd.read_csv('./data/sample_submission.csv')
     submission['Index'][:] = index
@@ -189,16 +200,14 @@ def main():
 
     args = argparser()
 
-
     if args.mode == 'train':
 
         trainset = ques_ans_dataset(mode=args.mode)
-
-        train(trainset, BATCH_SIZE=2)
+        train(trainset, args, BATCH_SIZE=3)
 
     else:
 
-        predict(test_data_path=args.test_data_path, model_path=args.load_model, BATCH_SIZE=1)
+        predict(args, BATCH_SIZE=30)
 
 
 
