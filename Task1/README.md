@@ -18,4 +18,13 @@
       python3 cls.py --mode train --xlnet
 
 
+4. predict
+- produce submission file
 
+- with Bert fine tuning model
+	  
+      python3 cls.py --test_data_path ./data/test.csv --mode test --load_model ./model/path/to/your/model
+
+- with XLNet fine tuning model
+ 
+	  python3 cls.py --test_data_path ./data/test.csv --mode test --xlnet --load_model ./model/path/to/your/model
