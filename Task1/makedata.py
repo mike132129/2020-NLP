@@ -86,7 +86,7 @@ if __name__ == '__main__':
         model_version = 'xlnet-base-cased'
         tokenizer = XLNetTokenizer.from_pretrained(model_version, do_lower_case=False)
     else:
-        model_version = 'bert-base-uncased'
+        model_version = 'bert-large-uncased'
         tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
 
     context, text_attention_mask = tokenization(text, tokenizer)

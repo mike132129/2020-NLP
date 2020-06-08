@@ -43,7 +43,7 @@ def train(trainset, args, BATCH_SIZE=2):
         cus_model = modified_XLNet(model, device)
 
     else:
-        model_version = 'bert-base-uncased'
+        model_version = 'bert-large-uncased'
         model = BertModel.from_pretrained(model_version)
         cus_model = modified_bert(model, device)
 
@@ -155,7 +155,7 @@ def predict(args, BATCH_SIZE):
         cus_model = modified_XLNet(model, device)
 
     else:
-        model_version = 'bert-base-uncased'
+        model_version = 'bert-large-uncased'
         tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
         model = BertModel.from_pretrained(model_version)
         cus_model = modified_XLNet(model, device)
