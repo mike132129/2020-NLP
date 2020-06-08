@@ -36,7 +36,7 @@ class modified_bert(nn.Module):
         return output
 
 class modified_XLNet(nn.Module):
-    def __init__(self, model, device):
+    def __init__(self, model, device, pretrained_config):
         super(modified_XLNet, self).__init__()
         self.model = model
         self.cls_linear_1 = nn.Linear(768, 200)
@@ -44,13 +44,14 @@ class modified_XLNet(nn.Module):
         self.device = device
         self.dropout_1 = nn.Dropout(0.5)
         self.dropout_2 = nn.Dropout(0.5)
-        self.sequence_summary = SequenceSummary
+        self.sequence_summary = SequenceSummary(pretrained_config)
 
     def forward(self, input_ids, attention_mask, labels):
 
         xlnet_output = self.model(input_ids=input_ids,attention_mask=attention_mask)
-        last_output = xlnet_output[0][:, -1] # we can try other layer or mean of all layer (among 512 layers)
-        cls_logits = self.cls_linear_1(last_output)
+        output = xlnet_output[0]
+        output = self.sequence_summary(output)
+        cls_logits = self.cls_linear_1(output)
         cls_logits = self.dropout_2(cls_logits)
         cls_logits = self.cls_linear_2(cls_logits)
         cls_logits = cls_logits.squeeze(-1)

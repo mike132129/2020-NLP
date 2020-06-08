@@ -40,7 +40,8 @@ def train(trainset, args, BATCH_SIZE=2):
     if args.xlnet:
         model_version = 'xlnet-base-cased'
         model = XLNetModel.from_pretrained(model_version)
-        cus_model = modified_XLNet(model, device)
+        cus_model = modified_XLNet(model, device, model.config)
+
 
     else:
         model_version = 'bert-large-uncased'
@@ -70,10 +71,13 @@ def train(trainset, args, BATCH_SIZE=2):
         total_loss = 0
 
         ####### FREEZE LAYER
-        print('FREEZEEEEEEE')
-        for i, [j, k] in enumerate(cus_model.named_parameters()):
-            if i < 21:
-                k.requires_grad = False
+        if args.xlnet:
+            pass
+        else:
+            print('FREEZEEEEEEE')
+            for i, [j, k] in enumerate(cus_model.named_parameters()):
+                if i < 21:
+                    k.requires_grad = False
 
         ###########
 
