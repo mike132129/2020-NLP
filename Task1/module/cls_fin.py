@@ -2,6 +2,7 @@ from transformers import BertTokenizer, BertModel, XLNetModel
 from transformers.modeling_utils import SequenceSummary
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import pdb
 
@@ -20,6 +21,7 @@ class modified_bert(nn.Module):
         bert_output = self.model(input_ids=input_ids,attention_mask=attention_mask)
         pool_output = self.dropout_1(bert_output[1])
         cls_logits = self.cls_linear_1(pool_output)
+        cls_logits = F.relu(cls_logits)
         cls_logits = self.dropout_2(cls_logits)
         cls_logits = self.cls_linear_2(cls_logits)
         cls_logits = cls_logits.squeeze(-1)
@@ -52,6 +54,7 @@ class modified_XLNet(nn.Module):
         output = xlnet_output[0]
         output = self.sequence_summary(output)
         cls_logits = self.cls_linear_1(output)
+        cls_logits = self.relu(cls_logits)
         cls_logits = self.dropout_2(cls_logits)
         cls_logits = self.cls_linear_2(cls_logits)
         cls_logits = cls_logits.squeeze(-1)

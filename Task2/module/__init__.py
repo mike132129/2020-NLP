@@ -1,1 +1,1 @@
-from .causal_bert import causal_modified_bert
+from .causal_model import causal_modified_xlnet, causal_modified_bert
