@@ -1,8 +1,8 @@
 from transformers import BertTokenizer, BertModel, XLNetModel
 from transformers.modeling_utils import SequenceSummary
 import torch.nn as nn
-import torch
 import torch.nn.functional as F
+import torch
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import pdb
 
@@ -10,8 +10,8 @@ class modified_bert(nn.Module):
     def __init__(self, model, device):
         super(modified_bert, self).__init__()
         self.model = model
-        self.cls_linear_1 = nn.Linear(768, 200)
-        self.cls_linear_2 = nn.Linear(200, 1)
+        self.cls_linear_1 = nn.Linear(768, 300)
+        self.cls_linear_2 = nn.Linear(300, 1)
         self.device = device
         self.dropout_1 = nn.Dropout(0.5)
         self.dropout_2 = nn.Dropout(0.5)
@@ -21,7 +21,6 @@ class modified_bert(nn.Module):
         bert_output = self.model(input_ids=input_ids,attention_mask=attention_mask)
         pool_output = self.dropout_1(bert_output[1])
         cls_logits = self.cls_linear_1(pool_output)
-        cls_logits = F.relu(cls_logits)
         cls_logits = self.dropout_2(cls_logits)
         cls_logits = self.cls_linear_2(cls_logits)
         cls_logits = cls_logits.squeeze(-1)
@@ -41,8 +40,8 @@ class modified_XLNet(nn.Module):
     def __init__(self, model, device, pretrained_config):
         super(modified_XLNet, self).__init__()
         self.model = model
-        self.cls_linear_1 = nn.Linear(768, 200)
-        self.cls_linear_2 = nn.Linear(200, 1)
+        self.cls_linear_1 = nn.Linear(768, 300)
+        self.cls_linear_2 = nn.Linear(300, 2)
         self.device = device
         self.dropout_1 = nn.Dropout(0.5)
         self.dropout_2 = nn.Dropout(0.5)
@@ -53,8 +52,8 @@ class modified_XLNet(nn.Module):
         xlnet_output = self.model(input_ids=input_ids,attention_mask=attention_mask)
         output = xlnet_output[0]
         output = self.sequence_summary(output)
-        cls_logits = self.cls_linear_1(output)
-        cls_logits = self.relu(cls_logits)
+        cls_logits = self.dropout_1(output)
+        cls_logits = self.cls_linear_1(cls_logits)
         cls_logits = self.dropout_2(cls_logits)
         cls_logits = self.cls_linear_2(cls_logits)
         cls_logits = cls_logits.squeeze(-1)
@@ -62,10 +61,12 @@ class modified_XLNet(nn.Module):
         if labels == None: # when predicting
             return cls_logits
 
-        pos_weight = torch.FloatTensor([10015/822]).to(self.device)
-        criterion = BCEWithLogitsLoss(pos_weight=pos_weight) # proportion of positive sample is 7
 
-        cls_loss = criterion(cls_logits.view(-1, 1), labels.view(-1, 1))
+
+        class_weight = torch.FloatTensor([1/10015, 1/822]).to(self.device)
+        criterion = CrossEntropyLoss(weight=class_weight) # proportion of positive sample is 7
+
+        cls_loss = criterion(cls_logits.view(-1, 2), labels.view(-1))
 
         output = (cls_loss, cls_logits) 
         return output
