@@ -1,5 +1,5 @@
 import numpy
-from transformers import BertTokenizer, BertModel, AdamW, get_linear_schedule_with_warmup, XLNetModel
+from transformers import BertTokenizer, BertModel, AdamW, get_linear_schedule_with_warmup, XLNetModel, RobertaModel
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader, random_split
 import torch
@@ -7,7 +7,7 @@ import torch.nn as nn
 
 from argparse import ArgumentParser
 from dataset import causal_dataset, create_mini_batch
-from module.causal_bert import causal_modified_bert
+from module.causal_model import causal_modified_bert, causal_modified_xlnet
 import pdb
 from tqdm import tqdm
 from makedata import *
@@ -23,8 +23,9 @@ def argparser():
     parser.add_argument('--load_model')
     parser.add_argument('--output_path')
     parser.add_argument('--mode')
-    parser.add_argument('--xlnet', action='store_true')
-    parser.add_argument('--batch_size')
+    parser.add_argument('--roberta', default=False, action='store_true')
+    parser.add_argument('--bert', default=False, action='store_true')
+    parser.add_argument('--batch_size', default=3)
     parser.add_argument('--path')
 
     args = parser.parse_args()
@@ -33,30 +34,35 @@ def argparser():
 
 def preprocess_test_data(args):
 
-    if args.xlnet:
-        model_version = 'xlnet-base-cased'
-        tokenizer = XLNetTokenizer.from_pretrained(model_version, do_lower_case=False)
+    if args.roberta:
+        model_version = 'roberta-base'
+        tokenizer = RobertaTokenizer.from_pretrained(model_version, do_lower_case=False)
     else:
         model_version = 'bert-base-uncased'
         tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
 
     index, text, _, _ = load_data(args)
-    context, text_attention_mask = tokenization(text, tokenizer)
+    context, text_attention_mask = tokenization(text, tokenizer, args)
     np.save('./data/test.npy', context)
     np.save('./data/test_attention_mask.npy', text_attention_mask)
     return index, text
 
 
-def train(trainset, BATCH_SIZE):
+def train(trainset, args, BATCH_SIZE):
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     print("device:", device)
+    # device = torch.device('cpu')
     
-    model_version = 'bert-base-uncased' # or xlnet-base-cased
-    model = BertModel.from_pretrained(model_version)
+    if args.roberta:
+        model_version = 'roberta-base'
+        model = RobertaModel.from_pretrained(model_version)
+        cus_model = causal_modified_bert(model)
+    elif args.bert:
+        model_version = 'bert-base-uncased' # or xlnet-base-cased
+        model = BertModel.from_pretrained(model_version)
+        cus_model = causal_modified_bert(model)
 
     model.to(device)
-
-    cus_model = causal_modified_bert(model)
     cus_model.to(device)
 
     train_set, valid_set = random_split(trainset, [750, 50])
@@ -64,11 +70,11 @@ def train(trainset, BATCH_SIZE):
     trainloader = DataLoader(train_set, batch_size=BATCH_SIZE, collate_fn=create_mini_batch)
     validloader = DataLoader(valid_set, batch_size=BATCH_SIZE, collate_fn=create_mini_batch)
 
-    epochs = 100
+    epochs = 30
 
     total_steps = len(trainloader) * epochs
 
-    optimizer = AdamW(cus_model.parameters(), lr=8e-7, eps=1e-8)
+    optimizer = AdamW(cus_model.parameters(), lr=5e-6, eps=1e-8)
     scheduler = get_linear_schedule_with_warmup(optimizer, 
                                             num_warmup_steps = 0, # Default value in run_glue.py
                                             num_training_steps = total_steps)
@@ -86,9 +92,12 @@ def train(trainset, BATCH_SIZE):
 
         ####### FREEZE LAYER
         # print('FREEZEEEEEEE')
-        for i, [j, k] in enumerate(cus_model.named_parameters()):
-            if i < 21:
-                k.requires_grad = False
+        if args.roberta:
+            pass
+        elif args.bert:
+            for i, [j, k] in enumerate(cus_model.named_parameters()):
+                if i < 21:
+                    k.requires_grad = False
 
         ###########
 
@@ -152,7 +161,7 @@ def train(trainset, BATCH_SIZE):
             print('  Total cause_Start Loss: {}, cause_End Loss: {}, effect_Start Loss: {}, effect_end Loss: {}'.\
                 format(val_loss[0]/len(validloader), val_loss[1]/len(validloader), val_loss[2]/len(validloader), val_loss[3]/len(validloader)))
 
-        torch.save(cus_model.state_dict(), './model/freeze-epoch-lr-5e-7-%s.pth' % epoch)
+        torch.save(cus_model.state_dict(), './model/xlnet-freeze-epoch-lr-5e-7-%s.pth' % epoch)
 
 def predict(index, text, args):
 
@@ -160,14 +169,20 @@ def predict(index, text, args):
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     print("device:", device)
 
-    PRETRAINED_MODEL_NAME = "bert-base-uncased"
-    tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME, do_lower_case=True)
+    if args.roberta:
+        model_version = 'roberta-base'
+        tokenizer = RobertaTokenizer.from_pretrained(model_version, do_lower_case=True)
+        model = RobertaModel.from_pretrained(model_version)
+        cus_model = causal_modified_bert(model)
 
-    model = BertModel.from_pretrained(PRETRAINED_MODEL_NAME)
+    elif args.bert:
+
+        model_version = "bert-base-uncased"
+        tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
+        model = BertModel.from_pretrained(model_version)
+        cus_model = causal_modified_bert(model)
 
     model.to(device)
-
-    cus_model = causal_modified_bert(model)
     cus_model.load_state_dict(torch.load(args.load_model))
     cus_model.to(device)
 
@@ -225,7 +240,7 @@ def main():
 
     if args.mode == 'train':
         trainset = causal_dataset(mode=args.mode)
-        train(trainset, BATCH_SIZE=int(args.batch_size))
+        train(trainset, args, BATCH_SIZE=int(args.batch_size))
 
     if args.mode == 'test':
         index, text = preprocess_test_data(args)

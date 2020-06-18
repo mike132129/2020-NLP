@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 import pdb
-from transformers import BertTokenizer, XLNetTokenizer
+from transformers import BertTokenizer, XLNetTokenizer, RobertaTokenizer
 from argparse import ArgumentParser
 import csv
 import pandas as pd
@@ -29,11 +29,15 @@ def load_data(args):
         train_data = csv.reader(file, delimiter=';')
         t = 0
 
+
+
         try:
             args.train
             for row in train_data:
 
                 if t:
+                    if row[0] == '0009.00005':
+                        continue
                     index += [row[0]]
                     text += [row[1]]
                     cause += [row[2]]
@@ -51,17 +55,21 @@ def load_data(args):
 
     return index, text, cause, effect
 
-def tokenization(text, tokenizer):
+def tokenization(text, tokenizer, args):
     context = []
     text_attention_mask = []
 
     for i in tqdm(range(len(text))):
+
+        if args.roberta:
+            text[i] = ' ' + text[i]
+
         token_text = tokenizer.tokenize(text[i])
         token_text_id = tokenizer.convert_tokens_to_ids(token_text)
         bert_input = tokenizer.prepare_for_model(ids=token_text_id,
                                                 max_length=512,
                                                 pad_to_max_length=True)
-
+        
         input_ids = np.array(bert_input['input_ids'])
         attention_mask = np.array(bert_input['attention_mask'])
         context += [input_ids]
@@ -69,7 +77,7 @@ def tokenization(text, tokenizer):
 
     return context, text_attention_mask
 
-def make_label(context, cause, effect, tokenizer): # context is token id
+def make_label(context, cause, effect, tokenizer, args): # context is token id
 
     print('make_label')
 
@@ -79,14 +87,22 @@ def make_label(context, cause, effect, tokenizer): # context is token id
     effect_end = []
 
     for i in range(len(context)):
+
+        if args.roberta:
+            cause[i] = ' ' + cause[i]
+            effect[i] = ' ' + effect[i]
+
         # tokenize cause and effect
         cause_token = tokenizer.tokenize(cause[i])
         cause_token_id = tokenizer.convert_tokens_to_ids(cause_token)
         
         cause_range = find_sub_list(cause_token_id, context[i])
-        cause_start += [cause_range[0][0]]
-        cause_end += [cause_range[0][1]]
-
+        try:
+            cause_start += [cause_range[0][0]]
+            cause_end += [cause_range[0][1]]
+        except: 
+            print(cause[i])
+            pdb.set_trace()
 
         effect_token = tokenizer.tokenize(effect[i])
         effect_token_id = tokenizer.convert_tokens_to_ids(effect_token)
@@ -96,6 +112,7 @@ def make_label(context, cause, effect, tokenizer): # context is token id
             effect_start += [effect_range[0][0]]
             effect_end += [effect_range[0][1]]
         except:
+            print(effect[i])
             pdb.set_trace()
     
     cause_start = np.array(cause_start, dtype=np.float)
@@ -123,7 +140,8 @@ def argparser():
 
     parser = ArgumentParser()
     parser.add_argument('--path')
-    parser.add_argument('--xlnet', action='store_true', help='whether using xlnet tokenizer for preprocessing')
+    parser.add_argument('--bert', action='store_true', default=False, help='whether using bert tokenizer for preprocessing')
+    parser.add_argument('--roberta', action='store_true', default=False)
     parser.add_argument('--train', action='store_true')
     args = parser.parse_args()
 
@@ -133,14 +151,15 @@ def argparser():
 if __name__ == "__main__":
     args = argparser()
 
-    if args.xlnet:
-        model_version = 'xlnet-base-cased'
-        tokenizer = XLNetTokenizer.from_pretrained(model_version, do_lower_case=False)
-    else:
+    if args.roberta:
+        model_version = 'roberta-base'
+        tokenizer = RobertaTokenizer.from_pretrained(model_version, do_lower_case=True)
+
+    elif args.bert:
         model_version = 'bert-base-uncased'
         tokenizer = BertTokenizer.from_pretrained(model_version, do_lower_case=True)
 
     index, text, cause, effect = load_data(args)
-    context, text_attention_mask = tokenization(text, tokenizer)
-    cause_start, cause_end, effect_start, effect_end = make_label(context, cause, effect, tokenizer)
+    context, text_attention_mask = tokenization(text, tokenizer, args)
+    cause_start, cause_end, effect_start, effect_end = make_label(context, cause, effect, tokenizer, args)
     save_preprocessing(context, text_attention_mask, cause_start, cause_end, effect_start, effect_end, args)

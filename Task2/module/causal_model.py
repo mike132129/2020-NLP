@@ -78,7 +78,6 @@ class causal_modified_bert(nn.Module):
 		e_end_target = labels[3]
 
 		loss_fct = CrossEntropyLoss()
-		pdb.set_trace()
 		c_start_loss = loss_fct(c_start_logits, c_start_target.long())
 		c_end_loss = loss_fct(c_end_logits, c_end_target.long())
 		e_start_loss = loss_fct(e_start_logits, e_start_target.long())
