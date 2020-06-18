@@ -28,7 +28,7 @@ class modified_bert(nn.Module):
         if labels == None: # when predicting
             return cls_logits
 
-        pos_weight = torch.FloatTensor([10015/822]).to(self.device)
+        pos_weight = torch.FloatTensor([7]).to(self.device)
         criterion = BCEWithLogitsLoss(pos_weight=pos_weight) # proportion of positive sample is 7
 
         cls_loss = criterion(cls_logits.view(-1, 1), labels.view(-1, 1))
